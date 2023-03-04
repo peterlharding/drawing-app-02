@@ -1,2 +1,3 @@
 # drawing-app-02
-Drawing app in the style of Excalidraw
+
+Drawing app in the style of Excalidraw implemented using React
