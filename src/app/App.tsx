@@ -1,7 +1,8 @@
+
 import React, {useLayoutEffect, useState} from 'react';
 
 // import rough from 'roughjs/bundled/rough.esm';
-import rough from "roughjs/bin/rough";
+import rough from "roughjs/bin/rough.js";
 
 import './App.css';
 
@@ -10,9 +11,16 @@ const generator = rough.generator();
 
 // ---------------------------------------------------------------------------
 
+type Position = string | null | undefined
+
 interface Point {
     x: number,
     y: number
+}
+
+interface PairOfPoints {
+    topLeft: Point,
+    bottomRight: Point
 }
 
 interface DrawingElement {
@@ -22,8 +30,10 @@ interface DrawingElement {
     x2: number,
     y2: number,
     type: string,
-    roughElement: any
+    roughElement: any,
+    position?: Position
 }
+
 
 // ---------------------------------------------------------------------------
 
@@ -139,6 +149,54 @@ const App = () => {
         }
     }
     
+
+    // -----------------------------------------------------------------------
+
+    const nearPoint = (
+        x: number,
+        y: number,
+        x1: number,
+        y1: number,
+        name: string) => {
+        return (Math.abs(x - x1) < 5 && Math.abs(y - y1) < 5) ? name : null
+    }
+
+    // -----------------------------------------------------------------------
+
+    const positionWithinElement = (
+            x: number,
+            y: number,
+            element: DrawingElement): string|null => {
+
+        const {type, x1, y1, x2, y2} = element
+
+        switch (type) {
+            case 'rectangle': {
+                const topLeft = nearPoint(x, y, x1, y1, 'tl')
+                const topRight = nearPoint(x, y, x2, y1, 'tr')
+                const bottomLeft = nearPoint(x, y, x1, y2, 'bl')
+                const bottomRight = nearPoint(x, y, x2, y2, 'br')
+                // return {x1: minX, y1: minY, x2: maxX, y2: maxY}
+                const inside =  x >= x1 && x <= x2 && y >= y1 && y <= y2 ? "inside" : null
+                return topLeft || topRight || bottomLeft || bottomRight || inside
+            }
+            case 'line': {
+                const a: Point = {x: x1, y: y1}
+                const b: Point = {x: x2, y: y2}
+                const c: Point = {x, y}
+                const offset: number = distance(a, b) - (distance(a, c) + distance(b, c))
+                const start = nearPoint(x, y, x1, y1, 'start')
+                const end = nearPoint(x, y, x2, y2, 'end')
+                const inside =  Math.abs(offset) < 1 ? 'inside' : null
+                return start || end || inside
+
+            }
+            default:
+                return null
+        }
+
+    }
+
     // -----------------------------------------------------------------------
 
     const getElementAtPosition = (
@@ -146,8 +204,40 @@ const App = () => {
             y: number,
             elements: DrawingElement[]) => {
 
-        return elements.find(element => isWithinElement(x, y, element))
+        return elements
+                .map(element => ({...element, position: positionWithinElement(x, y, element)}))
+                .find(element => element.position !== null)
     }
+
+    // -----------------------------------------------------------------------
+
+    const adjustElementCoordinates = (element: DrawingElement) => {
+        const {type, x1, y1, x2, y2} = element
+
+        switch (type) {
+            case 'rectangle':
+            case 'circle' :
+            case 'ellipse':
+                {
+                const minX = Math.min(x1, x2)
+                const maxX = Math.max(x1, x2)
+                const minY = Math.min(y1, y2)
+                const maxY = Math.max(y1, y2)
+                return {x1: minX, y1: minY, x2: maxX, y2: maxY}
+            }
+            case 'line': {
+                if (x1 < x2 || x1=== x2 && y1 < y2) {
+                    return {x1,y1, x2, y2}
+                } else {
+                    return {x2, y2, x1, y1}
+                }
+            }
+            default: {
+                return {x1: 10, y1: 10, x2: 20, y2: 20}
+            }
+        }
+    }
+
 
     // -----------------------------------------------------------------------
 
@@ -170,6 +260,61 @@ const App = () => {
 
     // -----------------------------------------------------------------------
 
+    const cursorForPosition = (position: Position) => {
+        switch (position) {
+            case 'tl':
+            case 'br':
+            case 'start':
+            case 'end':
+                return 'nwse-resize'
+            case 'tr':
+            case 'bl':
+                return 'nesw-resize'
+            default:
+                return "move"
+        }
+    }
+
+    // -----------------------------------------------------------------------
+
+    const resizeCoordinates = (
+            clientX: number,
+            clientY: number,
+            x1: number,
+            y1: number,
+            x2: number,
+            y2: number,
+            position: Position): PairOfPoints|null => {
+
+        let tl: Point
+        let br: Point
+
+        switch (position) {
+            case 'tl':
+            case 'start':
+                tl = {x: clientX, y: clientY}
+                br = {x: x2, y: y2}
+                return {topLeft: tl, bottomRight: br}
+            case 'tr':
+                tl = {x: x1, y: clientY}
+                br = {x: clientX, y: y2}
+                return {topLeft: tl, bottomRight: br}
+            case 'bl':
+                tl = {x: clientX, y: y1}
+                br = {x: x2, y: clientY}
+                return {topLeft: tl, bottomRight: br}
+            case 'br':
+            case 'end':
+                tl = {x: x1, y: y1}
+                br = {x: clientX, y: clientY}
+                return {topLeft: tl, bottomRight: br}
+            default:
+                return null
+        }
+    }
+
+    // -----------------------------------------------------------------------
+
     const mouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
 
         const {clientX, clientY} = event;
@@ -177,14 +322,20 @@ const App = () => {
 
         setMouseDownPoint(point)
 
+        console.log(`Down ${point.x} ${point.y} - Tool ${tool}`)
+
         if (tool === 'selection') {
             // If we are on an element
-            // 
             const element = getElementAtPosition(point.x, point.y, elements)
+
             if (element) {
                 setSelectedElement(element)
-                setAction('moving')
-                event.currentTarget.style.cursor = "move"
+                console.log(JSON.stringify(element))
+                if (element.position === 'inside') {
+                    setAction('moving')
+                } else {
+                    setAction('resizing')
+                }
             }
         } else {
             const id = elements.length
@@ -207,10 +358,21 @@ const App = () => {
 
         setMousePoint(point)
 
-        if (!action) {
-            return;
+        if (tool === 'selection') {
+            const element = getElementAtPosition(clientX, clientY, elements)
+            console.log(JSON.stringify(element))
+            if (element) {
+                const cursor = cursorForPosition(element.position)
+                console.log(cursor)
+                event.currentTarget.style.cursor = cursor
+            } else {
+                event.currentTarget.style.cursor = "default"  
+            }
         }
 
+        if (!action || (action == '')) {
+            return;
+        }
 
         switch (action) {
 
@@ -240,8 +402,20 @@ const App = () => {
                         const deltaY = clientY - mouseDownPoint.y
 
                         updateElement(id, x1 + deltaX, y1 + deltaY, x2 + deltaX, y2 + deltaY, type)
-    
                     }
+                }
+                break
+            }
+
+            case 'resizing': {
+                if (selectedElement !== null) {
+                    const {id, type, position, x1, y1, x2, y2 } = selectedElement
+                    const points = resizeCoordinates(clientX, clientY, x1, y1, x2, y2, position)
+                    if (points) {
+                        const {topLeft, bottomRight} = points
+                        updateElement(id, topLeft.x, topLeft.y, bottomRight.x, bottomRight.y, type)
+                    }
+
                 }
                 break
             }
@@ -254,6 +428,14 @@ const App = () => {
     // -----------------------------------------------------------------------
 
     const mouseUp = (event: React.MouseEvent<HTMLCanvasElement>) => {
+        const index = selectedElement?.id
+        if (index !== undefined) {
+            const {id, type} = elements[index]
+            if (action === 'drawing' || action === 'moving' || action === 'resizing') {
+                const {x1, y1, x2, y2} = adjustElementCoordinates(elements[index])
+                updateElement(id, x1, y1, x2, y2, type)
+            }
+        }
         setAction('none')
         setSelectedElement(null)
         event.currentTarget.style.cursor = "default"

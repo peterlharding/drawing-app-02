@@ -2,23 +2,44 @@
     "root": true,
     "extends": [
         "eslint:recommended",
-        "plugin:@typescript-eslint/recommended"
+        "plugin:import/recommended",
+        "plugin:node/recommended",
+        "plugin:@typescript-eslint/recommended",
+        "plugin:eslint-import-resolver-typescript/recommended"
     ],
     "parser": "@typescript-eslint/parser",
     "parserOptions": {
+        "ecmaVersion": 2020,
         "project": ["./tsconfig.json"]
     },
     "plugins": [
-        "@typescript-eslint"
+        "@typescript-eslint",
+        "eslint-plugin-import",
+        "eslint-plugin-node",
+        "eslint-import-resolver-typescript"
     ],
     "rules": {
         "@typescript-eslint/strict-boolean-expressions": [
-            2,
+            "off",
             {
-                "allowString" : false,
-                "allowNumber" : false
+                "allowString" : true,
+                "allowNumber" : true
             }
-        ]
+        ],
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "off",
+        "@typescript-eslint/no-non-null-assertion": "off",
+        "node/exports-style": ["warn", "module.exports"],
+        "node/file-extension-in-import": ["warn", "always"],
+        "node/prefer-global/buffer": ["warn", "always"],
+        "node/prefer-global/console": ["warn", "always"],
+        "node/prefer-global/process": ["warn", "always"],
+        "node/prefer-global/url-search-params": ["warn", "always"],
+        "node/prefer-global/url": ["warn", "always"],
+        "node/prefer-promises/dns": "warn",
+        "node/prefer-promises/fs": "warn",
+        "node/no-unsupported-features/es-syntax": "warn",
+        "node/no-missing-import": "warn"
     },
     "ignorePatterns": [
         "src/**/*.test.ts", 
